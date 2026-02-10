@@ -29,7 +29,7 @@ DEFAULT_VENUES = [
 ]
 
 BATCH_SIZE = 200  # Max per API call
-REVIEW_CONCURRENCY = 10  # Parallel review fetches
+REVIEW_CONCURRENCY = 3  # Parallel review fetches (keep low to avoid 429)
 
 
 def _get_value(field):
@@ -129,16 +129,24 @@ async def fetch_openreview_notes_paginated(
     return all_notes
 
 
-async def fetch_reviews_for_note(forum_id: str) -> list[dict]:
-    """Fetch reviews for a specific paper (forum)."""
+async def fetch_reviews_for_note(forum_id: str, max_retries: int = 3) -> list[dict]:
+    """Fetch reviews for a specific paper (forum) with retry on 429."""
     params = {
         "forum": forum_id,
         "select": "id,content,signatures",
     }
 
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(f"{OPENREVIEW_API_BASE}/notes", params=params)
-        resp.raise_for_status()
+        for attempt in range(max_retries):
+            resp = await client.get(f"{OPENREVIEW_API_BASE}/notes", params=params)
+            if resp.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                await asyncio.sleep(wait)
+                continue
+            resp.raise_for_status()
+            break
+        else:
+            return []
         raw = resp.json()
 
     reviews = []
@@ -192,7 +200,7 @@ async def fetch_reviews_batch(forum_ids: list[str]) -> dict[str, list[dict]]:
                 results[fid] = reviews
             except Exception:
                 results[fid] = []
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1.0)
 
     tasks = [_fetch_one(fid) for fid in forum_ids]
     await asyncio.gather(*tasks)

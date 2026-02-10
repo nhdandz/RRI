@@ -1057,6 +1057,14 @@ async def _collect_hf_models():
 
                         author = m.get("author") or (mid.split("/")[0] if "/" in mid else None)
 
+                        def _parse_iso(val):
+                            if not val or not isinstance(val, str):
+                                return val
+                            try:
+                                return datetime.fromisoformat(val.replace("Z", "+00:00")).replace(tzinfo=None)
+                            except (ValueError, TypeError):
+                                return None
+
                         await repo.upsert_by_model_id({
                             "model_id": mid,
                             "author": author,
@@ -1070,8 +1078,8 @@ async def _collect_hf_models():
                             "languages": languages[:20] if languages else None,
                             "license": license_val,
                             "parameter_count": parameter_count,
-                            "created_at_hf": m.get("createdAt"),
-                            "last_modified_hf": m.get("lastModified"),
+                            "created_at_hf": _parse_iso(m.get("createdAt")),
+                            "last_modified_hf": _parse_iso(m.get("lastModified")),
                         })
                         collected += 1
                     await session.commit()
@@ -1115,12 +1123,19 @@ async def _collect_hf_daily_papers():
                     authors_raw = paper.get("authors") or []
                     authors = [a.get("name", "") for a in authors_raw if a.get("name")]
 
+                    pub_at = paper.get("publishedAt")
+                    if pub_at and isinstance(pub_at, str):
+                        try:
+                            pub_at = datetime.fromisoformat(pub_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                        except (ValueError, TypeError):
+                            pub_at = None
+
                     await repo.upsert_by_arxiv_id({
                         "arxiv_id": arxiv_id,
                         "title": title,
                         "authors": authors,
                         "upvotes": paper.get("upvotes", 0),
-                        "published_at": paper.get("publishedAt"),
+                        "published_at": pub_at,
                         "collected_date": today,
                     })
                     collected += 1
@@ -1396,7 +1411,7 @@ async def _enrich_openreview_reviews():
     if not notes_to_enrich:
         return
 
-    batch_size = 50
+    batch_size = 20
     enriched = 0
 
     for i in range(0, len(notes_to_enrich), batch_size):
@@ -1444,7 +1459,7 @@ async def _enrich_openreview_reviews():
             total_batches=(len(notes_to_enrich) + batch_size - 1) // batch_size,
             enriched=enriched,
         )
-        await _asyncio.sleep(0.5)
+        await _asyncio.sleep(3)
 
     logger.info("OpenReview review enrichment completed", enriched=enriched)
 
@@ -1458,7 +1473,7 @@ def link_openreview_papers():
 async def _link_openreview_papers():
     import re
 
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     from src.storage.database import create_async_session_factory
     from src.storage.models.openreview_note import OpenReviewNote
@@ -1466,11 +1481,9 @@ async def _link_openreview_papers():
 
     async_session_factory = create_async_session_factory()
 
-    def normalize_title(t: str) -> str:
-        t = t.lower().strip()
-        t = re.sub(r"[^a-z0-9\s]", "", t)
-        t = re.sub(r"\s+", " ", t)
-        return t
+    def clean_for_search(t: str) -> str:
+        """Remove special chars for ILIKE search."""
+        return t.replace("%", "").replace("_", "").replace("\\", "")
 
     # Get unlinked openreview notes
     async with async_session_factory() as session:
@@ -1494,28 +1507,31 @@ async def _link_openreview_papers():
 
         async with async_session_factory() as session:
             for note_uuid, title in batch:
-                norm = normalize_title(title)
-                if len(norm) < 10:
+                if not title or len(title.strip()) < 10:
                     continue
 
-                # Search by exact normalized title match
-                result = await session.execute(
-                    select(Paper.id).where(
-                        func.lower(func.regexp_replace(Paper.title, r'[^a-zA-Z0-9\s]', '', 'g'))
-                        == norm
-                    ).limit(1)
-                )
-                paper_row = result.first()
+                paper_row = None
 
-                if not paper_row:
-                    # Fallback: ILIKE with the first 80 chars
-                    search_prefix = title[:80].replace("%", "").replace("_", "")
+                # Strategy 1: ILIKE with first 50 chars as substring
+                search_term = clean_for_search(title[:50].strip())
+                if len(search_term) >= 15:
                     result = await session.execute(
                         select(Paper.id).where(
-                            Paper.title.ilike(f"{search_prefix}%")
+                            Paper.title.ilike(f"%{search_term}%")
                         ).limit(1)
                     )
                     paper_row = result.first()
+
+                # Strategy 2: If no match, try shorter prefix (30 chars)
+                if not paper_row:
+                    search_term = clean_for_search(title[:30].strip())
+                    if len(search_term) >= 15:
+                        result = await session.execute(
+                            select(Paper.id).where(
+                                Paper.title.ilike(f"{search_term}%")
+                            ).limit(1)
+                        )
+                        paper_row = result.first()
 
                 if paper_row:
                     note_result = await session.execute(
@@ -1531,6 +1547,7 @@ async def _link_openreview_papers():
         logger.info(
             "Paper linking batch done",
             batch=i // batch_size + 1,
+            total_batches=(len(unlinked) + batch_size - 1) // batch_size,
             linked=linked,
         )
 
