@@ -9,12 +9,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .
-
 COPY src/ src/
 COPY scripts/ scripts/
 COPY migrations/ migrations/
 COPY alembic.ini .
+
+RUN pip install --no-cache-dir -e .
 
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser

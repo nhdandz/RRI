@@ -21,6 +21,7 @@
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-features">Features</a> •
   <a href="#-architecture">Architecture</a> •
+  <a href="#-cli-tool">CLI Tool</a> •
   <a href="#-screenshots">Screenshots</a> •
   <a href="#-api-reference">API Reference</a> •
   <a href="#-contributing">Contributing</a>
@@ -157,6 +158,119 @@ RRI automatically collects and aggregates data from **11+ academic and developer
 │              │  │  Documents embeddings │  │              │
 └──────────────┘  └───────────────────────┘  └──────────────┘
 ```
+
+---
+
+## 💻 CLI Tool
+
+RRI includes a built-in CLI (`rri`) for running OSINT tasks directly from the terminal — no browser needed.
+
+### Usage
+
+Since the project runs via Docker, use `docker exec` to run CLI commands:
+
+```bash
+# Shorthand: create an alias (add to your ~/.zshrc or ~/.bashrc)
+alias rri='docker exec -it rri-app-1 rri'
+```
+
+Or run directly:
+
+```bash
+docker exec rri-app-1 rri --help
+```
+
+### Available Commands
+
+```
+rri collect   Collect papers, models, and repos from various sources
+rri search    Search papers, vectors, and repos
+rri analyze   Analyze papers with LLM
+rri export    Export reports and data
+rri chat      Interactive RAG-powered chat (REPL)
+```
+
+### `rri collect` — Data Collection
+
+```bash
+# Collect papers from ArXiv
+rri collect arxiv --query "LLM" --category cs.AI --days 7 --max-results 100
+
+# Collect papers from OpenAlex
+rri collect openalex --query "transformer" --from-year 2024 --max-results 50
+
+# Collect models from HuggingFace
+rri collect huggingface --query "llm" --type models --max-results 20
+
+# Collect datasets from HuggingFace
+rri collect huggingface --query "instruction" --type datasets --max-results 20
+
+# Ingest a GitHub repository
+rri collect repo https://github.com/user/repo
+```
+
+**Options:**
+- `--save-db` — Save collected data to database (default: off for ArXiv)
+- `--output PATH` — Custom output directory (default: `./reports/`)
+
+### `rri search` — Search
+
+```bash
+# Search papers in database (full-text)
+rri search papers "attention mechanism" --limit 20 --sort-by citations
+
+# Semantic vector search across papers
+rri search vector "multi-modal RAG pipeline" --limit 10 --collection papers
+
+# Search repositories
+rri search repos "llm inference" --limit 10
+```
+
+### `rri analyze` — LLM-Powered Analysis
+
+```bash
+# Analyze a single paper by ArXiv ID (uses local Ollama by default)
+rri analyze paper 2401.12345
+
+# Analyze with cloud LLM (OpenAI) and save to database
+rri analyze paper 2401.12345 --cloud --save-db
+
+# Batch analyze papers matching a query
+rri analyze batch "LLM reasoning" --max-results 10 --category cs.AI
+```
+
+Each analysis produces: summary, topic classification, keyword extraction, and entity extraction (methods, datasets, metrics, tools). Results are saved as Markdown + JSON in `./reports/`.
+
+### `rri export` — Export Data
+
+```bash
+# Generate a weekly research report
+rri export report --period weekly --format md
+
+# Export papers as CSV
+rri export papers --query "LLM" --limit 50 --format csv
+
+# Export papers as JSON or Markdown
+rri export papers --query "transformer" --format json
+rri export papers --format md --output ./my-export/papers.md
+```
+
+### `rri chat` — Interactive RAG Chat
+
+```bash
+# Start chat with local LLM (Ollama)
+rri chat
+
+# Start chat with cloud LLM (OpenAI)
+rri chat --cloud
+
+# Disable reranking for faster responses
+rri chat --no-rerank
+```
+
+Type your question and press Enter. The system retrieves relevant papers/repos from the vector database and generates answers with citations. Type `quit` to exit.
+
+> **Note:** All output files (JSON, Markdown, CSV) are saved to `./reports/` by default. Use `--output` to specify a custom path.
 
 ---
 
@@ -331,6 +445,11 @@ make pull-model      # Download Ollama LLM model
 make test            # Run tests with coverage
 make lint            # Run ruff linter
 make format          # Auto-format code with ruff
+
+# CLI (via Docker)
+docker exec rri-app-1 rri --help        # Show CLI help
+docker exec rri-app-1 rri collect --help # Show collect subcommands
+docker exec -it rri-app-1 rri chat      # Interactive RAG chat
 ```
 
 ---
@@ -403,6 +522,17 @@ RRI/
 │
 ├── 📂 src/                      # Python backend
 │   ├── main.py                  # FastAPI app factory
+│   ├── cli/                     # CLI tool (rri command)
+│   │   ├── main.py              #   Typer app entry point
+│   │   ├── _async.py            #   Async runner helper
+│   │   ├── _context.py          #   Dependency factories
+│   │   ├── _output.py           #   Rich formatting & file writers
+│   │   └── commands/            #   Command implementations
+│   │       ├── collect.py       #     rri collect (arxiv/openalex/hf/repo)
+│   │       ├── search.py        #     rri search (papers/vector/repos)
+│   │       ├── analyze.py       #     rri analyze (paper/batch)
+│   │       ├── export.py        #     rri export (report/papers)
+│   │       └── chat.py          #     rri chat (interactive RAG)
 │   ├── api/                     # API layer
 │   │   ├── routers/             #   15 route modules
 │   │   ├── schemas/             #   Pydantic models
