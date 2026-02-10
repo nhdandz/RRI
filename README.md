@@ -162,6 +162,11 @@ RRI automatically collects and aggregates data from **11+ academic and developer
 
 ## 📸 Screenshots
 
+### LandingPage
+
+![LandingPage](docs/screenshots/landingpage.png)
+
+
 ### Dashboard
 
 ![Dashboard](docs/screenshots/dashboard.png)
