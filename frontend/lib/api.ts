@@ -168,6 +168,41 @@ export async function triggerTechRadarGenerate() {
   return data;
 }
 
+export async function fetchHFModels(params?: Record<string, any>) {
+  const { data } = await api.get("/trending/hf-models", { params });
+  return data;
+}
+
+export async function fetchHFPapers() {
+  const { data } = await api.get("/trending/hf-papers");
+  return data;
+}
+
+export async function fetchHFFilters() {
+  const { data } = await api.get("/trending/hf-filters");
+  return data;
+}
+
+export async function fetchHFModelDetail(modelId: string) {
+  const { data } = await api.get(`/trending/hf-model-detail/${encodeURIComponent(modelId)}`);
+  return data;
+}
+
+export async function fetchHFStats() {
+  const { data } = await api.get("/trending/hf-stats");
+  return data;
+}
+
+export async function triggerCollectHFModels() {
+  const { data } = await api.post("/trending/hf-models/collect");
+  return data;
+}
+
+export async function triggerCollectHFPapers() {
+  const { data } = await api.post("/trending/hf-papers/collect");
+  return data;
+}
+
 export async function sendChatMessage(question: string, filters?: any) {
   const { data } = await api.post("/chat", { question, filters });
   return data;
@@ -406,6 +441,82 @@ export async function setConversationDocuments(conversationId: string, documentI
 
 export async function fetchConversationDocuments(conversationId: string) {
   const { data } = await api.get(`/chat/conversations/${conversationId}/documents`);
+  return data;
+}
+
+// ── Community Posts API ──
+
+export async function fetchCommunityPosts(params?: Record<string, any>) {
+  const { data } = await api.get("/community/posts", { params });
+  return data;
+}
+
+export async function fetchCommunityFilters() {
+  const { data } = await api.get("/community/posts/filters");
+  return data;
+}
+
+export async function fetchCommunityStats(params?: Record<string, any>) {
+  const { data } = await api.get("/community/posts/stats", { params });
+  return data;
+}
+
+export async function fetchCommunityKeywords(params?: Record<string, any>) {
+  const { data } = await api.get("/community/posts/keywords", { params });
+  return data;
+}
+
+export async function triggerCollectCommunity() {
+  const { data } = await api.post("/community/posts/collect");
+  return data;
+}
+
+// ── GitHub Discussions API ──
+
+export async function fetchGithubDiscussions(params?: Record<string, any>) {
+  const { data } = await api.get("/community/discussions", { params });
+  return data;
+}
+
+export async function fetchDiscussionFilters() {
+  const { data } = await api.get("/community/discussions/filters");
+  return data;
+}
+
+export async function fetchDiscussionStats() {
+  const { data } = await api.get("/community/discussions/stats");
+  return data;
+}
+
+export async function triggerCollectDiscussions() {
+  const { data } = await api.post("/community/discussions/collect");
+  return data;
+}
+
+// ── OpenReview API ──
+
+export async function fetchOpenReviewNotes(params?: Record<string, any>) {
+  const { data } = await api.get("/community/openreview", { params });
+  return data;
+}
+
+export async function fetchOpenReviewFilters() {
+  const { data } = await api.get("/community/openreview/filters");
+  return data;
+}
+
+export async function fetchOpenReviewStats() {
+  const { data } = await api.get("/community/openreview/stats");
+  return data;
+}
+
+export async function fetchOpenReviewKeywords(params?: Record<string, any>) {
+  const { data } = await api.get("/community/openreview/keywords", { params });
+  return data;
+}
+
+export async function triggerCollectOpenReview() {
+  const { data } = await api.post("/community/openreview/collect");
   return data;
 }
 

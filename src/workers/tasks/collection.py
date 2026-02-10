@@ -1,7 +1,7 @@
 """Collection tasks for gathering data from external sources."""
 
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from src.core.config import get_settings
 from src.core.logging import get_logger
@@ -967,3 +967,571 @@ async def _enrich_paper_citations():
         failed=failed,
         total=len(papers_to_enrich),
     )
+
+
+# ============================================================
+# HuggingFace Collection
+# ============================================================
+
+POPULAR_PIPELINE_TAGS = [
+    "text-generation", "text-classification", "token-classification",
+    "question-answering", "summarization", "translation", "fill-mask",
+    "text2text-generation", "image-classification", "object-detection",
+    "image-segmentation", "image-to-text", "text-to-image",
+    "text-to-speech", "automatic-speech-recognition", "audio-classification",
+    "feature-extraction", "sentence-similarity", "zero-shot-classification",
+    "reinforcement-learning",
+]
+
+HF_API_BASE = "https://huggingface.co/api"
+
+
+@celery_app.task(
+    name="src.workers.tasks.collection.collect_hf_models",
+    soft_time_limit=3600,
+    time_limit=3900,
+)
+def collect_hf_models():
+    """Collect trending models from HuggingFace API and store in DB."""
+    _run_async(_collect_hf_models())
+
+
+async def _collect_hf_models():
+    import httpx
+
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.hf_repo import HFModelRepository
+
+    async_session_factory = create_async_session_factory()
+    collected = 0
+    seen_ids: set[str] = set()
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        # Collect for each pipeline tag + overall top
+        queries: list[dict] = []
+
+        # Overall top by downloads and likes
+        queries.append({"sort": "downloads", "direction": "-1", "limit": 50, "full": "true"})
+        queries.append({"sort": "likes", "direction": "-1", "limit": 50, "full": "true"})
+
+        # Per pipeline tag
+        for tag in POPULAR_PIPELINE_TAGS:
+            queries.append({"filter": tag, "sort": "downloads", "direction": "-1", "limit": 50, "full": "true"})
+            queries.append({"filter": tag, "sort": "likes", "direction": "-1", "limit": 50, "full": "true"})
+
+        for params in queries:
+            try:
+                resp = await client.get(f"{HF_API_BASE}/models", params=params)
+                resp.raise_for_status()
+                raw = resp.json()
+
+                async with async_session_factory() as session:
+                    repo = HFModelRepository(session)
+                    for m in raw:
+                        mid = m.get("modelId") or m.get("id", "")
+                        if not mid or mid in seen_ids:
+                            continue
+                        seen_ids.add(mid)
+
+                        architecture = None
+                        config = m.get("config") or {}
+                        architectures = config.get("architectures")
+                        if architectures and isinstance(architectures, list):
+                            architecture = architectures[0]
+
+                        model_type = config.get("model_type")
+
+                        parameter_count = None
+                        safetensors = m.get("safetensors")
+                        if safetensors and isinstance(safetensors, dict):
+                            total = safetensors.get("total")
+                            if total:
+                                parameter_count = total
+
+                        tags = m.get("tags") or []
+                        languages = [t.replace("language:", "") for t in tags if t.startswith("language:")]
+
+                        license_val = None
+                        card_data = m.get("cardData") or {}
+                        license_val = card_data.get("license") or m.get("license")
+
+                        author = m.get("author") or (mid.split("/")[0] if "/" in mid else None)
+
+                        await repo.upsert_by_model_id({
+                            "model_id": mid,
+                            "author": author,
+                            "downloads": m.get("downloads", 0),
+                            "likes": m.get("likes", 0),
+                            "pipeline_tag": m.get("pipeline_tag"),
+                            "architecture": architecture,
+                            "model_type": model_type,
+                            "library_name": m.get("library_name"),
+                            "tags": tags[:50] if tags else None,
+                            "languages": languages[:20] if languages else None,
+                            "license": license_val,
+                            "parameter_count": parameter_count,
+                            "created_at_hf": m.get("createdAt"),
+                            "last_modified_hf": m.get("lastModified"),
+                        })
+                        collected += 1
+                    await session.commit()
+            except Exception:
+                logger.exception("Error collecting HF models", params=params)
+
+    logger.info("HuggingFace model collection completed", collected=collected, unique=len(seen_ids))
+
+
+@celery_app.task(name="src.workers.tasks.collection.collect_hf_daily_papers")
+def collect_hf_daily_papers():
+    """Collect daily papers from HuggingFace API and store in DB."""
+    _run_async(_collect_hf_daily_papers())
+
+
+async def _collect_hf_daily_papers():
+    import httpx
+
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.hf_repo import HFPaperRepository
+
+    async_session_factory = create_async_session_factory()
+    collected = 0
+    today = date.today()
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            resp = await client.get(f"{HF_API_BASE}/daily_papers")
+            resp.raise_for_status()
+            raw = resp.json()
+
+            async with async_session_factory() as session:
+                repo = HFPaperRepository(session)
+                for item in raw:
+                    paper = item.get("paper") or {}
+                    arxiv_id = paper.get("id")
+                    if not arxiv_id:
+                        continue
+
+                    title = item.get("title") or paper.get("title", "")
+                    authors_raw = paper.get("authors") or []
+                    authors = [a.get("name", "") for a in authors_raw if a.get("name")]
+
+                    await repo.upsert_by_arxiv_id({
+                        "arxiv_id": arxiv_id,
+                        "title": title,
+                        "authors": authors,
+                        "upvotes": paper.get("upvotes", 0),
+                        "published_at": paper.get("publishedAt"),
+                        "collected_date": today,
+                    })
+                    collected += 1
+                await session.commit()
+        except Exception:
+            logger.exception("Error collecting HF daily papers")
+
+    logger.info("HuggingFace daily papers collection completed", collected=collected)
+
+
+# ============================================================
+# Community Posts Collection (HN, Dev.to, Mastodon, Lemmy)
+# ============================================================
+
+@celery_app.task(name="src.workers.tasks.collection.collect_hackernews")
+def collect_hackernews():
+    """Collect AI-related stories from Hacker News."""
+    _run_async(_collect_hackernews())
+
+
+async def _collect_hackernews():
+    from src.services.hackernews_service import fetch_all_hn_ai_stories
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.community_repo import CommunityPostRepository
+
+    async_session_factory = create_async_session_factory()
+    collected = 0
+
+    try:
+        posts = await fetch_all_hn_ai_stories()
+        async with async_session_factory() as session:
+            repo = CommunityPostRepository(session)
+            for post_data in posts:
+                post_data["collected_at"] = datetime.now()
+                await repo.upsert_by_platform_id(post_data)
+                collected += 1
+            await session.commit()
+    except Exception:
+        logger.exception("Error collecting Hacker News")
+
+    logger.info("HN collection completed", collected=collected)
+
+
+@celery_app.task(name="src.workers.tasks.collection.collect_devto")
+def collect_devto():
+    """Collect AI-related articles from Dev.to."""
+    _run_async(_collect_devto())
+
+
+async def _collect_devto():
+    from src.services.devto_service import fetch_all_devto_ai_articles
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.community_repo import CommunityPostRepository
+
+    async_session_factory = create_async_session_factory()
+    collected = 0
+
+    try:
+        posts = await fetch_all_devto_ai_articles()
+        async with async_session_factory() as session:
+            repo = CommunityPostRepository(session)
+            for post_data in posts:
+                post_data["collected_at"] = datetime.now()
+                await repo.upsert_by_platform_id(post_data)
+                collected += 1
+            await session.commit()
+    except Exception:
+        logger.exception("Error collecting Dev.to")
+
+    logger.info("Dev.to collection completed", collected=collected)
+
+
+@celery_app.task(name="src.workers.tasks.collection.collect_mastodon")
+def collect_mastodon():
+    """Collect AI-related posts from Mastodon instances."""
+    _run_async(_collect_mastodon())
+
+
+async def _collect_mastodon():
+    from src.services.mastodon_service import fetch_all_mastodon_ai_posts
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.community_repo import CommunityPostRepository
+
+    async_session_factory = create_async_session_factory()
+    collected = 0
+
+    try:
+        posts = await fetch_all_mastodon_ai_posts()
+        async with async_session_factory() as session:
+            repo = CommunityPostRepository(session)
+            for post_data in posts:
+                post_data["collected_at"] = datetime.now()
+                await repo.upsert_by_platform_id(post_data)
+                collected += 1
+            await session.commit()
+    except Exception:
+        logger.exception("Error collecting Mastodon")
+
+    logger.info("Mastodon collection completed", collected=collected)
+
+
+@celery_app.task(name="src.workers.tasks.collection.collect_lemmy")
+def collect_lemmy():
+    """Collect AI-related posts from Lemmy instances."""
+    _run_async(_collect_lemmy())
+
+
+async def _collect_lemmy():
+    from src.services.lemmy_service import fetch_all_lemmy_ai_posts
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.community_repo import CommunityPostRepository
+
+    async_session_factory = create_async_session_factory()
+    collected = 0
+
+    try:
+        posts = await fetch_all_lemmy_ai_posts()
+        async with async_session_factory() as session:
+            repo = CommunityPostRepository(session)
+            for post_data in posts:
+                post_data["collected_at"] = datetime.now()
+                await repo.upsert_by_platform_id(post_data)
+                collected += 1
+            await session.commit()
+    except Exception:
+        logger.exception("Error collecting Lemmy")
+
+    logger.info("Lemmy collection completed", collected=collected)
+
+
+@celery_app.task(name="src.workers.tasks.collection.collect_all_community")
+def collect_all_community():
+    """Trigger collection from all community platforms in parallel."""
+    collect_hackernews.delay()
+    collect_devto.delay()
+    collect_mastodon.delay()
+    collect_lemmy.delay()
+    logger.info("Triggered all community collection tasks")
+
+
+# ============================================================
+# GitHub Discussions Collection
+# ============================================================
+
+@celery_app.task(
+    name="src.workers.tasks.collection.collect_github_discussions",
+    soft_time_limit=3600,
+    time_limit=3900,
+)
+def collect_github_discussions():
+    """Collect discussions from AI-related GitHub repositories."""
+    _run_async(_collect_github_discussions())
+
+
+async def _collect_github_discussions():
+    from src.services.github_discussions_service import fetch_github_discussions
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.github_discussion_repo import GitHubDiscussionRepository
+
+    async_session_factory = create_async_session_factory()
+    settings = get_settings()
+
+    if not settings.GITHUB_TOKEN:
+        logger.warning("No GitHub token configured, skipping discussions collection")
+        return
+
+    collected = 0
+
+    try:
+        discussions = await fetch_github_discussions(
+            token=settings.GITHUB_TOKEN,
+            query="AI OR LLM OR machine learning",
+            limit=200,
+        )
+        async with async_session_factory() as session:
+            repo = GitHubDiscussionRepository(session)
+            for disc_data in discussions:
+                disc_data["collected_at"] = datetime.now()
+                await repo.upsert_by_discussion_id(disc_data)
+                collected += 1
+            await session.commit()
+    except Exception:
+        logger.exception("Error collecting GitHub Discussions")
+
+    logger.info("GitHub Discussions collection completed", collected=collected)
+
+
+# ============================================================
+# OpenReview Collection (papers + reviews + paper linking)
+# ============================================================
+
+@celery_app.task(
+    name="src.workers.tasks.collection.collect_openreview",
+    soft_time_limit=14400,
+    time_limit=15000,
+)
+def collect_openreview():
+    """Collect ALL papers from OpenReview venues (paginated, no reviews).
+    After papers are collected, triggers review enrichment and paper linking.
+    """
+    _run_async(_collect_openreview_papers())
+    enrich_openreview_reviews.delay()
+    link_openreview_papers.delay()
+
+
+async def _collect_openreview_papers():
+    import asyncio as _asyncio
+
+    from src.services.openreview_service import DEFAULT_VENUES, fetch_openreview_notes_paginated
+    from src.storage.database import create_async_session_factory
+    from src.storage.repositories.openreview_repo import OpenReviewRepository
+
+    async_session_factory = create_async_session_factory()
+    total_collected = 0
+    commit_every = 200
+
+    for venue_id in DEFAULT_VENUES:
+        try:
+            notes = await fetch_openreview_notes_paginated(venue_id=venue_id)
+            pending = 0
+            async with async_session_factory() as session:
+                repo = OpenReviewRepository(session)
+                for note_data in notes:
+                    note_data["collected_at"] = datetime.now()
+                    await repo.upsert_by_note_id(note_data)
+                    total_collected += 1
+                    pending += 1
+                    if pending >= commit_every:
+                        await session.commit()
+                        pending = 0
+                if pending > 0:
+                    await session.commit()
+            logger.info("OpenReview venue done", venue=venue_id, collected=len(notes))
+        except Exception:
+            logger.exception("Error collecting OpenReview venue", venue=venue_id)
+        await _asyncio.sleep(1)
+
+    logger.info("OpenReview paper collection completed", total=total_collected)
+
+
+@celery_app.task(
+    name="src.workers.tasks.collection.enrich_openreview_reviews",
+    soft_time_limit=14400,
+    time_limit=15000,
+)
+def enrich_openreview_reviews():
+    """Fetch reviews for OpenReview papers that don't have reviews yet."""
+    _run_async(_enrich_openreview_reviews())
+
+
+async def _enrich_openreview_reviews():
+    import asyncio as _asyncio
+
+    from sqlalchemy import select
+
+    from src.services.openreview_service import fetch_reviews_batch
+    from src.storage.database import create_async_session_factory
+    from src.storage.models.openreview_note import OpenReviewNote
+
+    async_session_factory = create_async_session_factory()
+
+    # Get all notes without reviews
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(OpenReviewNote.id, OpenReviewNote.forum_id)
+            .where(OpenReviewNote.reviews_fetched == False)  # noqa: E712
+            .order_by(OpenReviewNote.created_at.asc())
+        )
+        notes_to_enrich = [(row.id, row.forum_id) for row in result.all()]
+
+    logger.info("Starting OpenReview review enrichment", total=len(notes_to_enrich))
+
+    if not notes_to_enrich:
+        return
+
+    batch_size = 50
+    enriched = 0
+
+    for i in range(0, len(notes_to_enrich), batch_size):
+        batch = notes_to_enrich[i : i + batch_size]
+        forum_ids = [fid for _, fid in batch]
+        id_map = {fid: uid for uid, fid in batch}
+
+        try:
+            reviews_map = await fetch_reviews_batch(forum_ids)
+
+            async with async_session_factory() as session:
+                for fid, reviews in reviews_map.items():
+                    note_uuid = id_map.get(fid)
+                    if not note_uuid:
+                        continue
+
+                    result = await session.execute(
+                        select(OpenReviewNote).where(OpenReviewNote.id == note_uuid)
+                    )
+                    note = result.scalar_one_or_none()
+                    if not note:
+                        continue
+
+                    ratings_with_values = [r for r in reviews if r.get("rating") is not None]
+                    if ratings_with_values:
+                        avg_rating = sum(r["rating"] for r in ratings_with_values) / len(ratings_with_values)
+                        note.average_rating = round(avg_rating, 2)
+                        note.review_count = len(ratings_with_values)
+                        note.ratings = ratings_with_values
+                    else:
+                        note.average_rating = None
+                        note.review_count = 0
+                        note.ratings = []
+
+                    note.reviews_fetched = True
+                    enriched += 1
+
+                await session.commit()
+        except Exception:
+            logger.exception("Error enriching reviews batch", batch_start=i)
+
+        logger.info(
+            "Review enrichment batch done",
+            batch=i // batch_size + 1,
+            total_batches=(len(notes_to_enrich) + batch_size - 1) // batch_size,
+            enriched=enriched,
+        )
+        await _asyncio.sleep(0.5)
+
+    logger.info("OpenReview review enrichment completed", enriched=enriched)
+
+
+@celery_app.task(name="src.workers.tasks.collection.link_openreview_papers")
+def link_openreview_papers():
+    """Link OpenReview notes to existing papers in DB by matching normalized titles."""
+    _run_async(_link_openreview_papers())
+
+
+async def _link_openreview_papers():
+    import re
+
+    from sqlalchemy import func, select
+
+    from src.storage.database import create_async_session_factory
+    from src.storage.models.openreview_note import OpenReviewNote
+    from src.storage.models.paper import Paper
+
+    async_session_factory = create_async_session_factory()
+
+    def normalize_title(t: str) -> str:
+        t = t.lower().strip()
+        t = re.sub(r"[^a-z0-9\s]", "", t)
+        t = re.sub(r"\s+", " ", t)
+        return t
+
+    # Get unlinked openreview notes
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(OpenReviewNote.id, OpenReviewNote.title)
+            .where(OpenReviewNote.paper_id.is_(None))
+            .where(OpenReviewNote.title.isnot(None))
+        )
+        unlinked = [(row.id, row.title) for row in result.all()]
+
+    logger.info("Starting paper linking", unlinked=len(unlinked))
+
+    if not unlinked:
+        return
+
+    linked = 0
+    batch_size = 100
+
+    for i in range(0, len(unlinked), batch_size):
+        batch = unlinked[i : i + batch_size]
+
+        async with async_session_factory() as session:
+            for note_uuid, title in batch:
+                norm = normalize_title(title)
+                if len(norm) < 10:
+                    continue
+
+                # Search by exact normalized title match
+                result = await session.execute(
+                    select(Paper.id).where(
+                        func.lower(func.regexp_replace(Paper.title, r'[^a-zA-Z0-9\s]', '', 'g'))
+                        == norm
+                    ).limit(1)
+                )
+                paper_row = result.first()
+
+                if not paper_row:
+                    # Fallback: ILIKE with the first 80 chars
+                    search_prefix = title[:80].replace("%", "").replace("_", "")
+                    result = await session.execute(
+                        select(Paper.id).where(
+                            Paper.title.ilike(f"{search_prefix}%")
+                        ).limit(1)
+                    )
+                    paper_row = result.first()
+
+                if paper_row:
+                    note_result = await session.execute(
+                        select(OpenReviewNote).where(OpenReviewNote.id == note_uuid)
+                    )
+                    note = note_result.scalar_one_or_none()
+                    if note:
+                        note.paper_id = paper_row.id
+                        linked += 1
+
+            await session.commit()
+
+        logger.info(
+            "Paper linking batch done",
+            batch=i // batch_size + 1,
+            linked=linked,
+        )
+
+    logger.info("Paper linking completed", linked=linked, total=len(unlinked))

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from src.api.routers import alerts, auth, bookmarks, chat, document_chat, documents, folders, health, papers, reports, repositories, search, trending
+from src.api.routers import alerts, auth, bookmarks, chat, community, document_chat, documents, folders, health, papers, reports, repositories, search, trending
 from src.core.config import get_settings
 from src.core.logging import setup_logging
 
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(folders.router)
     app.include_router(bookmarks.router)
     app.include_router(documents.router)
+    app.include_router(community.router)
 
     return app
 

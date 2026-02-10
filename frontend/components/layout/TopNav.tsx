@@ -19,6 +19,9 @@ import {
   LogOut,
   User,
   Library,
+  Box,
+  Users,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
@@ -29,7 +32,9 @@ const navItems = [
   { href: "/papers", label: "Papers", icon: FileText },
   { href: "/repos", label: "Repos", icon: GitBranch },
   { href: "/trending", label: "Trending", icon: TrendingUp },
-  { href: "/search", label: "Search", icon: Search },
+  { href: "/huggingface", label: "HuggingFace", icon: Box },
+  { href: "/community", label: "Community", icon: Users },
+  { href: "/openreview", label: "OpenReview", icon: BookOpen },
   { href: "/chat", label: "AI Chat", icon: MessageSquare },
   { href: "/reports", label: "Reports", icon: BarChart3 },
 ];

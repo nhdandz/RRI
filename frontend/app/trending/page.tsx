@@ -4,11 +4,13 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   TrendingUp, Star, GitFork, ArrowUpRight, ChevronLeft, ChevronRight,
-  RefreshCw, Search, X, Check,
+  RefreshCw, Search, X, Check, Download, Heart, ExternalLink,
 } from "lucide-react";
 import {
   fetchTrendingPapers, fetchTrendingRepos, fetchTechRadar,
   fetchTrendingFilters, triggerTechRadarGenerate,
+  fetchHFModels, fetchHFPapers, fetchHFFilters,
+  fetchGithubDiscussions, fetchDiscussionFilters,
 } from "@/lib/api";
 import { formatNumber } from "@/lib/utils";
 
@@ -206,7 +208,7 @@ export default function TrendingPage() {
   const [papers, setPapers] = useState<any[]>([]);
   const [repos, setRepos] = useState<any[]>([]);
   const [radar, setRadar] = useState<any>(null);
-  const [tab, setTab] = useState<"papers" | "repos" | "radar">("papers");
+  const [tab, setTab] = useState<"papers" | "repos" | "huggingface" | "discussions" | "radar">("papers");
   const [loading, setLoading] = useState(true);
 
   const [papersPage, setPapersPage] = useState(0);
@@ -224,6 +226,30 @@ export default function TrendingPage() {
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [activeTopics, setActiveTopics] = useState<string[]>([]);
   const [radarGenerating, setRadarGenerating] = useState(false);
+
+  // HuggingFace state
+  const [hfModels, setHfModels] = useState<any[]>([]);
+  const [hfModelsTotal, setHfModelsTotal] = useState(0);
+  const [hfModelsPage, setHfModelsPage] = useState(0);
+  const [hfPapers, setHfPapers] = useState<any[]>([]);
+  const [hfKeywords, setHfKeywords] = useState<any[]>([]);
+  const [hfPipelineTags, setHfPipelineTags] = useState<string[]>([]);
+  const [hfSelectedTask, setHfSelectedTask] = useState<string | null>(null);
+  const [hfSearchInput, setHfSearchInput] = useState("");
+  const [hfSearchQuery, setHfSearchQuery] = useState("");
+  const [hfLoading, setHfLoading] = useState(false);
+  const [hfInitialized, setHfInitialized] = useState(false);
+  const hfDebounceRef = useRef<NodeJS.Timeout>();
+  // Discussions state
+  const [discussions, setDiscussions] = useState<any[]>([]);
+  const [discussionsTotal, setDiscussionsTotal] = useState(0);
+  const [discussionsPage, setDiscussionsPage] = useState(0);
+  const [discussionsLoading, setDiscussionsLoading] = useState(false);
+  const [discussionsInitialized, setDiscussionsInitialized] = useState(false);
+  const [discSearchInput, setDiscSearchInput] = useState("");
+  const [discSearchQuery, setDiscSearchQuery] = useState("");
+  const discDebounceRef = useRef<NodeJS.Timeout>();
+
   const [repoSearchInput, setRepoSearchInput] = useState("");
   const [repoSearchQuery, setRepoSearchQuery] = useState("");
   const [paperSearchInput, setPaperSearchInput] = useState("");
@@ -348,6 +374,100 @@ export default function TrendingPage() {
     }
   };
 
+  // Load HF data when tab is first selected
+  const loadHFModels = useCallback(async (page: number, task?: string | null, search?: string) => {
+    setHfLoading(true);
+    try {
+      const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
+      if (task) params.task = task;
+      if (search) params.search = search;
+      const data = await fetchHFModels(params);
+      setHfModels(data.items || []);
+      setHfModelsTotal(data.total || 0);
+      setHfModelsPage(page);
+    } catch {
+      setHfModels([]);
+    } finally {
+      setHfLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "huggingface" && !hfInitialized) {
+      setHfInitialized(true);
+      setHfLoading(true);
+      Promise.all([
+        fetchHFModels({ skip: 0, limit: PAGE_SIZE }).catch(() => ({ items: [], total: 0 })),
+        fetchHFPapers().catch(() => ({ papers: [], keyword_trends: [] })),
+        fetchHFFilters().catch(() => ({ pipeline_tags: [] })),
+      ]).then(([m, p, f]) => {
+        setHfModels(m.items || []);
+        setHfModelsTotal(m.total || 0);
+        setHfPapers(p.papers || []);
+        setHfKeywords(p.keyword_trends || []);
+        setHfPipelineTags(f.pipeline_tags || []);
+        setHfLoading(false);
+      });
+    }
+  }, [tab, hfInitialized]);
+
+  // Load discussions when tab is first selected
+  const loadDiscussions = useCallback(async (page: number, search?: string) => {
+    setDiscussionsLoading(true);
+    try {
+      const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE, sort: "upvotes", sort_order: "desc" };
+      if (search) params.search = search;
+      const data = await fetchGithubDiscussions(params);
+      setDiscussions(data.items || []);
+      setDiscussionsTotal(data.total || 0);
+      setDiscussionsPage(page);
+    } catch {
+      setDiscussions([]);
+    } finally {
+      setDiscussionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "discussions" && !discussionsInitialized) {
+      setDiscussionsInitialized(true);
+      loadDiscussions(0);
+    }
+  }, [tab, discussionsInitialized, loadDiscussions]);
+
+  // Debounce discussions search
+  useEffect(() => {
+    clearTimeout(discDebounceRef.current);
+    discDebounceRef.current = setTimeout(() => setDiscSearchQuery(discSearchInput), 400);
+    return () => clearTimeout(discDebounceRef.current);
+  }, [discSearchInput]);
+
+  useEffect(() => {
+    if (discussionsInitialized) {
+      loadDiscussions(0, discSearchQuery || undefined);
+    }
+  }, [discSearchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalDiscussionPages = Math.ceil(discussionsTotal / PAGE_SIZE);
+
+  // Debounce HF search
+  useEffect(() => {
+    clearTimeout(hfDebounceRef.current);
+    hfDebounceRef.current = setTimeout(() => {
+      setHfSearchQuery(hfSearchInput);
+    }, 400);
+    return () => clearTimeout(hfDebounceRef.current);
+  }, [hfSearchInput]);
+
+  // Reload HF models when task/search changes
+  useEffect(() => {
+    if (hfInitialized) {
+      loadHFModels(0, hfSelectedTask, hfSearchQuery || undefined);
+    }
+  }, [hfSelectedTask, hfSearchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalHFModelPages = Math.ceil(hfModelsTotal / PAGE_SIZE);
+
   const totalPaperPages = Math.ceil(papersTotal / PAGE_SIZE);
   const totalRepoPages = Math.ceil(reposTotal / PAGE_SIZE);
 
@@ -359,7 +479,7 @@ export default function TrendingPage() {
       </div>
 
       <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/50 p-1">
-        {(["papers", "repos", "radar"] as const).map((t) => (
+        {(["papers", "repos", "huggingface", "discussions", "radar"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -369,7 +489,7 @@ export default function TrendingPage() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "papers" ? "Papers" : t === "repos" ? "Repositories" : "Tech Radar"}
+            {t === "papers" ? "Papers" : t === "repos" ? "Repositories" : t === "huggingface" ? "HuggingFace" : t === "discussions" ? "Discussions" : "Tech Radar"}
           </button>
         ))}
       </div>
@@ -552,6 +672,238 @@ export default function TrendingPage() {
                   onPageChange={(p) => loadRepos(p, selectedLanguage, topicParam, repoSearchQuery || undefined)} />
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ HuggingFace tab ══ */}
+      {tab === "huggingface" && (
+        <div className="space-y-6">
+          {/* Models section */}
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-foreground">Trending Models</h2>
+
+            {/* Search */}
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-2 shadow-soft transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 dark:shadow-soft-dark">
+              <Search size={16} className="ml-3 shrink-0 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search HuggingFace models..."
+                value={hfSearchInput}
+                onChange={(e) => { setHfSearchInput(e.target.value); setHfModelsPage(0); }}
+                className="flex-1 bg-transparent py-2 text-[14px] text-foreground placeholder:text-muted-foreground/50 outline-none"
+              />
+              {hfSearchInput && (
+                <button
+                  onClick={() => { setHfSearchInput(""); setHfSearchQuery(""); setHfModelsPage(0); }}
+                  className="rounded-xl px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Pipeline tag filter */}
+            {hfPipelineTags.length > 0 && (
+              <div className="rounded-2xl border border-border bg-card p-5">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Pipeline Task</span>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <Pill active={!hfSelectedTask} onClick={() => { setHfSelectedTask(null); setHfModelsPage(0); }}>All</Pill>
+                  {hfPipelineTags.map((tag) => (
+                    <Pill key={tag} active={hfSelectedTask === tag}
+                      onClick={() => { setHfSelectedTask(hfSelectedTask === tag ? null : tag); setHfModelsPage(0); }}>
+                      {tag}
+                    </Pill>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hfLoading && (
+              <div className="flex items-center justify-center py-16">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+              </div>
+            )}
+
+            {!hfLoading && (
+              <div className="space-y-3">
+                {hfModels.map((m: any, i: number) => (
+                  <a
+                    key={m.model_id}
+                    href={`https://huggingface.co/${m.model_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft transition-all duration-200 hover:shadow-soft-lg hover:border-primary/20 dark:shadow-soft-dark dark:hover:shadow-soft-dark-lg"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+                      {hfModelsPage * PAGE_SIZE + i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[14px] font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors duration-150">
+                        {m.model_id}
+                      </h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[12px]">
+                        <span className="flex items-center gap-1 font-medium text-blue-500 dark:text-blue-400">
+                          <Download size={12} /> {formatNumber(m.downloads)}
+                        </span>
+                        <span className="flex items-center gap-1 font-medium text-rose-500 dark:text-rose-400">
+                          <Heart size={12} /> {formatNumber(m.likes)}
+                        </span>
+                        {m.pipeline_tag && (
+                          <span className="rounded-lg bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            {m.pipeline_tag}
+                          </span>
+                        )}
+                        {m.architecture && (
+                          <span className="rounded-lg bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                            {m.architecture}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ExternalLink size={14} className="shrink-0 text-muted-foreground/40 transition-colors group-hover:text-primary" />
+                  </a>
+                ))}
+                {hfModels.length === 0 && (
+                  <p className="py-12 text-center text-sm text-muted-foreground">No models found.</p>
+                )}
+                {totalHFModelPages > 1 && (
+                  <Pagination
+                    currentPage={hfModelsPage}
+                    totalPages={totalHFModelPages}
+                    onPageChange={(p) => loadHFModels(p, hfSelectedTask, hfSearchQuery || undefined)}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Daily Papers section */}
+          {hfPapers.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-foreground">Daily Papers</h2>
+              <div className="space-y-3">
+                {hfPapers.map((p: any, i: number) => (
+                  <a
+                    key={p.arxiv_id || i}
+                    href={p.arxiv_id ? `https://arxiv.org/abs/${p.arxiv_id}` : "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft transition-all duration-200 hover:shadow-soft-lg hover:border-primary/20 dark:shadow-soft-dark dark:hover:shadow-soft-dark-lg"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[14px] font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors duration-150">
+                        {p.title}
+                      </h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[12px]">
+                        <span className="flex items-center gap-1 font-medium text-amber-500 dark:text-amber-400">
+                          <TrendingUp size={12} /> {p.upvotes} upvotes
+                        </span>
+                        {p.authors.length > 0 && (
+                          <span className="text-muted-foreground line-clamp-1">
+                            {p.authors.slice(0, 3).join(", ")}{p.authors.length > 3 ? ` +${p.authors.length - 3}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ExternalLink size={14} className="shrink-0 text-muted-foreground/40 transition-colors group-hover:text-primary" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Keyword Trends section */}
+          {hfKeywords.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-foreground">Keyword Trends</h2>
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-soft dark:shadow-soft-dark">
+                <div className="flex flex-wrap gap-2">
+                  {hfKeywords.map((kw: any) => (
+                    <span
+                      key={kw.keyword}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary/8 px-3 py-1.5 text-[12px] font-medium text-primary ring-1 ring-primary/15"
+                    >
+                      {kw.keyword}
+                      <span className="rounded-md bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold">
+                        {kw.count}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ Discussions tab ══ */}
+      {tab === "discussions" && (
+        <div className="space-y-4">
+          {/* Search */}
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-2 shadow-soft transition-all focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 dark:shadow-soft-dark">
+            <Search size={16} className="ml-3 shrink-0 text-muted-foreground" />
+            <input type="text" placeholder="Search GitHub Discussions..."
+              value={discSearchInput}
+              onChange={(e) => { setDiscSearchInput(e.target.value); setDiscussionsPage(0); }}
+              className="flex-1 bg-transparent py-2 text-[14px] text-foreground placeholder:text-muted-foreground/50 outline-none" />
+            {discSearchInput && (
+              <button onClick={() => { setDiscSearchInput(""); setDiscSearchQuery(""); setDiscussionsPage(0); }}
+                className="rounded-xl px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear</button>
+            )}
+          </div>
+
+          <div className="text-right text-[12px] text-muted-foreground">{formatNumber(discussionsTotal)} discussions</div>
+
+          {discussionsLoading && (
+            <div className="flex items-center justify-center py-16"><div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" /></div>
+          )}
+
+          {!discussionsLoading && discussions.length === 0 && (
+            <p className="py-12 text-center text-sm text-muted-foreground">No discussions found.</p>
+          )}
+
+          {!discussionsLoading && discussions.length > 0 && (
+            <div className="space-y-3">
+              {discussions.map((d: any) => (
+                <a key={d.id} href={d.url || "#"} target="_blank" rel="noopener noreferrer"
+                  className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft transition-all duration-200 hover:shadow-soft-lg hover:border-primary/20 dark:shadow-soft-dark dark:hover:shadow-soft-dark-lg">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="rounded-lg bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{d.repo_full_name}</span>
+                      {d.category && (
+                        <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{d.category}</span>
+                      )}
+                      {d.answer_chosen && (
+                        <span className="rounded-lg bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">Answered</span>
+                      )}
+                    </div>
+                    <h3 className="text-[14px] font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors line-clamp-2">{d.title}</h3>
+                    {d.author && <p className="mt-1 text-[12px] text-muted-foreground">by {d.author}</p>}
+                    <div className="mt-2 flex items-center gap-3 text-[12px]">
+                      <span className="flex items-center gap-1 font-medium text-amber-500"><TrendingUp size={12} /> {d.upvotes}</span>
+                      <span className="flex items-center gap-1 text-muted-foreground">💬 {d.comments_count}</span>
+                    </div>
+                    {d.labels && d.labels.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {d.labels.slice(0, 4).map((l: string) => (
+                          <span key={l} className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{l}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <ExternalLink size={14} className="mt-1 shrink-0 text-muted-foreground/40 group-hover:text-primary" />
+                </a>
+              ))}
+            </div>
+          )}
+
+          {!discussionsLoading && totalDiscussionPages > 1 && (
+            <Pagination currentPage={discussionsPage} totalPages={totalDiscussionPages}
+              onPageChange={(p) => loadDiscussions(p, discSearchQuery || undefined)} />
           )}
         </div>
       )}

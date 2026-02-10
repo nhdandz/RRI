@@ -32,31 +32,31 @@ celery_app.conf.update(
 )
 
 _beat_schedule = {
-    # ── Papers ──
-    # Collect NEW papers from ArXiv every 6 hours (recent papers only)
+    # ── Papers (every 3 days) ──
+    # Collect NEW papers from ArXiv every 3 days at midnight
     "collect-arxiv-papers": {
         "task": "src.workers.tasks.collection.collect_arxiv_papers",
-        "schedule": crontab(minute=0, hour="*/6"),
+        "schedule": crontab(minute=0, hour=0, day_of_month="1,4,7,10,13,16,19,22,25,28"),
         "options": {"queue": "collection"},
     },
-    # Full comprehensive collection every Saturday (catch anything missed)
+    # Full comprehensive collection every 2 weeks (1st and 15th)
     "collect-papers-comprehensive": {
         "task": "src.workers.tasks.collection.collect_papers_comprehensive",
-        "schedule": crontab(minute=0, hour=0, day_of_week=6),
+        "schedule": crontab(minute=0, hour=0, day_of_month="1,15"),
         "options": {"queue": "collection"},
     },
-    # Enrich paper citations every Sunday
+    # Enrich paper citations every 3 days (offset by 1 day from arxiv)
     "enrich-paper-citations": {
         "task": "src.workers.tasks.collection.enrich_paper_citations",
-        "schedule": crontab(minute=0, hour=2, day_of_week=0),
+        "schedule": crontab(minute=0, hour=2, day_of_month="2,5,8,11,14,17,20,23,26"),
         "options": {"queue": "collection"},
     },
 
     # ── Processing ──
-    # Process unprocessed papers (runs 30 min after each ArXiv collection)
+    # Process unprocessed papers (daily, after potential collection)
     "process-papers": {
         "task": "src.workers.tasks.processing.process_unprocessed_papers",
-        "schedule": crontab(minute=30, hour="*/6"),
+        "schedule": crontab(minute=30, hour=1),
         "options": {"queue": "processing"},
     },
     # Process unprocessed repos (every 12 hours)
@@ -70,6 +70,40 @@ _beat_schedule = {
         "task": "src.workers.tasks.processing.calculate_trending_scores",
         "schedule": crontab(minute=0, hour=3),
         "options": {"queue": "processing"},
+    },
+
+    # ── HuggingFace ──
+    "collect-hf-models": {
+        "task": "src.workers.tasks.collection.collect_hf_models",
+        "schedule": crontab(minute=0, hour=4),
+        "options": {"queue": "collection"},
+    },
+    "collect-hf-daily-papers": {
+        "task": "src.workers.tasks.collection.collect_hf_daily_papers",
+        "schedule": crontab(minute=0, hour=6),
+        "options": {"queue": "collection"},
+    },
+
+    # ── Community (HN, Dev.to, Mastodon, Lemmy) ──
+    "collect-community-all": {
+        "task": "src.workers.tasks.collection.collect_all_community",
+        "schedule": crontab(minute=0, hour="*/4"),
+        "options": {"queue": "collection"},
+    },
+
+    # ── GitHub Discussions ──
+    "collect-github-discussions": {
+        "task": "src.workers.tasks.collection.collect_github_discussions",
+        "schedule": crontab(minute=0, hour="*/8"),
+        "options": {"queue": "collection"},
+    },
+
+    # ── OpenReview ──
+    # Collect all papers (paginated) - every 3 days at 5 AM
+    "collect-openreview": {
+        "task": "src.workers.tasks.collection.collect_openreview",
+        "schedule": crontab(minute=0, hour=5, day_of_month="1,4,7,10,13,16,19,22,25,28"),
+        "options": {"queue": "collection"},
     },
 
     # ── Reports ──

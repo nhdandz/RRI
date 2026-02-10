@@ -1,12 +1,17 @@
 from src.storage.models.alert import Alert
 from src.storage.models.bookmark import Bookmark
+from src.storage.models.community_post import CommunityPost
 from src.storage.models.conversation import ChatMessage, Conversation
 from src.storage.models.conversation_document import ConversationDocument
 from src.storage.models.document import Document
 from src.storage.models.document_embedding import DocumentEmbedding
 from src.storage.models.folder import Folder
+from src.storage.models.github_discussion import GitHubDiscussion
+from src.storage.models.hf_model import HFModel
+from src.storage.models.hf_paper import HFPaper
 from src.storage.models.link import PaperRepoLink
 from src.storage.models.metrics import CrawlJob, MetricsHistory, TrendingScore
+from src.storage.models.openreview_note import OpenReviewNote
 from src.storage.models.paper import Paper
 from src.storage.models.repository import Repository
 from src.storage.models.subscription import ApiRateLimit, Subscription
@@ -34,4 +39,9 @@ __all__ = [
     "ConversationDocument",
     "TechRadarSnapshot",
     "WeeklyReport",
+    "HFModel",
+    "HFPaper",
+    "CommunityPost",
+    "GitHubDiscussion",
+    "OpenReviewNote",
 ]

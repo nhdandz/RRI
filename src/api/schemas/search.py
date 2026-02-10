@@ -57,6 +57,61 @@ class TrendingFiltersResponse(BaseModel):
     topics: list[str] = []
 
 
+class HFModelResponse(BaseModel):
+    model_id: str
+    author: str | None = None
+    downloads: int = 0
+    likes: int = 0
+    pipeline_tag: str | None = None
+    architecture: str | None = None
+
+
+class HFPaperResponse(BaseModel):
+    title: str
+    arxiv_id: str | None = None
+    upvotes: int = 0
+    authors: list[str] = []
+    published_at: str | None = None
+
+
+class HFKeywordTrend(BaseModel):
+    keyword: str
+    count: int
+
+
+class HFTrendingResponse(BaseModel):
+    papers: list[HFPaperResponse] = []
+    keyword_trends: list[HFKeywordTrend] = []
+
+
+class HFModelDetailResponse(BaseModel):
+    model_id: str
+    author: str | None = None
+    downloads: int = 0
+    likes: int = 0
+    pipeline_tag: str | None = None
+    architecture: str | None = None
+    model_type: str | None = None
+    library_name: str | None = None
+    tags: list[str] = []
+    languages: list[str] = []
+    license: str | None = None
+    parameter_count: int | None = None
+    created_at: str | None = None
+    last_modified: str | None = None
+
+
+class HFFiltersResponse(BaseModel):
+    pipeline_tags: list[str] = []
+
+
+class HFStatsResponse(BaseModel):
+    total_models: int = 0
+    total_downloads: int = 0
+    total_likes: int = 0
+    pipeline_distribution: dict[str, int] = {}
+
+
 class TechRadarItem(BaseModel):
     name: str
     reason: str
