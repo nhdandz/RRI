@@ -28,19 +28,6 @@
 
 ---
 
-<!-- 
-  📸 HƯỚNG DẪN THÊM ẢNH:
-  Hãy chụp ảnh màn hình (screenshot) của ứng dụng đang chạy và lưu vào thư mục docs/screenshots/
-  Các ảnh cần có:
-  1. docs/screenshots/dashboard.png - Trang Dashboard chính
-  2. docs/screenshots/papers.png - Trang Papers với biểu đồ
-  3. docs/screenshots/search.png - Trang tìm kiếm Semantic Search
-  4. docs/screenshots/chat.png - Trang AI Chat (RAG)
-  5. docs/screenshots/trending.png - Trang Trending
-  6. docs/screenshots/community.png - Trang Community
-  7. docs/logo.png - Logo của ứng dụng (có thể tạo bằng tool thiết kế)
--->
-
 ## 📖 Overview
 
 **RRI (Research & Repository Intelligence)** is a full-stack, self-hosted platform designed for researchers, engineers, and teams who want to **automate the discovery and analysis** of academic papers, open-source repositories, and AI/ML community discussions — all in one place.
@@ -175,69 +162,37 @@ RRI automatically collects and aggregates data from **11+ academic and developer
 
 ## 📸 Screenshots
 
-<!-- 
-  📸 HƯỚNG DẪN: Chụp ảnh màn hình ứng dụng đang chạy và thay thế các placeholder bên dưới.
-  Chạy ứng dụng với `make up` rồi truy cập http://localhost:3000
-  
-  Cách chụp trên macOS: Cmd + Shift + 4 (chụp vùng chọn) hoặc Cmd + Shift + 5
-  Lưu ảnh vào thư mục: docs/screenshots/
--->
-
 ### Dashboard
-> 📸 *Thêm ảnh tại:* `docs/screenshots/dashboard.png`
-> 
-> Chụp trang chính `http://localhost:3000` — hiển thị stat cards, recent papers, quick actions.
 
-<!-- ![Dashboard](docs/screenshots/dashboard.png) -->
+![Dashboard](docs/screenshots/dashboard.png)
 
 ### Papers — Overview & Analytics
-> 📸 *Thêm ảnh tại:* `docs/screenshots/papers-overview.png`
-> 
-> Chụp tab "Overview" tại `/papers` — hiển thị biểu đồ Category Distribution (donut) và Papers by Year (bar chart).
 
-<!-- ![Papers Overview](docs/screenshots/papers-overview.png) -->
+![Papers Overview](docs/screenshots/papers-overview.png)
 
 ### Papers — Browse & Filter
-> 📸 *Thêm ảnh tại:* `docs/screenshots/papers-browse.png`
-> 
-> Chụp tab "Papers" tại `/papers` — hiển thị danh sách papers dạng grid/table với filter categories.
 
-<!-- ![Papers Browse](docs/screenshots/papers-browse.png) -->
+![Papers Browse](docs/screenshots/papers-browse.png)
 
 ### Semantic Search
-> 📸 *Thêm ảnh tại:* `docs/screenshots/search.png`
-> 
-> Chụp trang `/search` sau khi search một query — hiển thị kết quả papers và repos với relevance score.
 
-<!-- ![Semantic Search](docs/screenshots/search.png) -->
+![Semantic Search](docs/screenshots/search.png)
 
 ### AI Chat (RAG)
-> 📸 *Thêm ảnh tại:* `docs/screenshots/chat.png`
-> 
-> Chụp trang `/chat` — hiển thị giao diện chat với AI, conversation list, và document panel.
 
-<!-- ![AI Chat](docs/screenshots/chat.png) -->
+![AI Chat](docs/screenshots/chat.png)
 
 ### Trending
-> 📸 *Thêm ảnh tại:* `docs/screenshots/trending.png`
-> 
-> Chụp trang `/trending` — hiển thị trending papers và repos, tech radar.
 
-<!-- ![Trending](docs/screenshots/trending.png) -->
+![Trending](docs/screenshots/trending.png)
 
 ### Community & OpenReview
-> 📸 *Thêm ảnh tại:* `docs/screenshots/community.png`
-> 
-> Chụp trang `/community` — hiển thị posts từ HackerNews, Dev.to, Mastodon, Lemmy.
 
-<!-- ![Community](docs/screenshots/community.png) -->
+![Community](docs/screenshots/community.png)
 
 ### HuggingFace Models
-> 📸 *Thêm ảnh tại:* `docs/screenshots/huggingface.png`
-> 
-> Chụp trang `/huggingface` — hiển thị model rankings, download stats.
 
-<!-- ![HuggingFace](docs/screenshots/huggingface.png) -->
+![HuggingFace](docs/screenshots/huggingface.png)
 
 ---
 
@@ -290,7 +245,7 @@ RRI automatically collects and aggregates data from **11+ academic and developer
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/RRI.git
+git clone https://github.com/nhdandz/RRI.git
 cd RRI
 ```
 
