@@ -122,29 +122,29 @@ RRI automatically collects and aggregates data from **11+ academic and developer
 └──────────────────────────────┬─────────────────────────────────────────┘
                                │ REST API
 ┌──────────────────────────────┴─────────────────────────────────────────┐
-│                          BACKEND (FastAPI)                              │
+│                          BACKEND (FastAPI)                             │
 │                                                                        │
-│  ┌──────────┐  ┌───────────┐  ┌─────────┐  ┌──────────┐  ┌─────────┐ │
-│  │  API     │  │ Collectors│  │Processors│  │   LLM    │  │   RAG   │ │
-│  │ Routers  │  │           │  │          │  │  Router  │  │Pipeline │ │
-│  │ (15)     │  │ ArXiv     │  │Embedding │  │          │  │         │ │
-│  │          │  │ GitHub    │  │Classifier│  │  Ollama  │  │Retriever│ │
-│  │ Papers   │  │ Semantic  │  │Summarizer│  │  OpenAI  │  │Reranker │ │
-│  │ Repos    │  │ Scholar   │  │Entity    │  │          │  │Generator│ │
-│  │ Search   │  │ OpenAlex  │  │Extractor │  └──────────┘  └─────────┘ │
-│  │ Trending │  │ PwC      │  │PaperCode │                             │
-│  │ Chat     │  │ HF       │  │Linker    │                             │
-│  │ Docs     │  │ OpenReview│  │TechRadar │                             │
-│  │ Community│  │ HN/Dev.to│  │Trending  │                             │
-│  │ Reports  │  │ Mastodon │  │Analyzer  │                             │
-│  │ Auth     │  │ Lemmy    │  │          │                             │
-│  │ Bookmarks│  │          │  │          │                             │
-│  └──────────┘  └───────────┘  └──────────┘                            │
+│  ┌──────────┐  ┌───────────┐  ┌────────--─┐  ┌──────────┐  ┌─────────┐ │
+│  │  API     │  │ Collectors│  │Processors │  │   LLM    │  │   RAG   │ │
+│  │ Routers  │  │           │  │           │  │  Router  │  │Pipeline │ │
+│  │ (15)     │  │ ArXiv     │  │Embedding  │  │          │  │         │ │
+│  │          │  │ GitHub    │  │Classifier │  │  Ollama  │  │Retriever│ │
+│  │ Papers   │  │ Semantic  │  │Summarizer │  │  OpenAI  │  │Reranker │ │
+│  │ Repos    │  │ Scholar   │  │Entity     │  │          │  │Generator│ │
+│  │ Search   │  │ OpenAlex  │  │Extractor  │  └──────────┘  └─────────┘ │
+│  │ Trending │  │ PwC       │  │PaperCode  │                            │
+│  │ Chat     │  │ HF        │  │Linker     │                            │
+│  │ Docs     │  │ OpenReview│  │TechRadar  │                            │
+│  │ Community│  │ HN/Dev.to │  │Trending   │                            │
+│  │ Reports  │  │ Mastodon  │  │Analyzer   │                            │
+│  │ Auth     │  │ Lemmy     │  │           │                            │
+│  │ Bookmarks│  │           │  │           │                            │
+│  └──────────┘  └───────────┘  └───────-───┘                            │
 │                                                                        │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │                    WORKER LAYER (Celery + Redis)                │   │
-│  │  • Periodic data collection    • Embedding generation          │   │
-│  │  • Citation enrichment         • Report generation             │   │
+│  │  • Periodic data collection    • Embedding generation           │   │
+│  │  • Citation enrichment         • Report generation              │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────┘
                                │
