@@ -226,9 +226,9 @@ rri chat   # Interactive RAG chat
 
 ![Reports](docs/screenshots/reports.png)
 
-### CLI — `rri collect`
+### CLI — `rri search`
 
-![CLI Collect](docs/screenshots/cli-collect.png)
+![CLI Search](docs/screenshots/cli-search.png)
 
 ### CLI — `rri chat` (Interactive RAG)
 
