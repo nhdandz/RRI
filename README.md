@@ -224,8 +224,7 @@ rri chat   # Interactive RAG chat
 
 ### Weekly Reports
 
-<!-- ![Reports](docs/screenshots/reports.png) -->
-> 📸 *Chụp ảnh trang `/reports` và lưu vào `docs/screenshots/reports.png`*
+![Reports](docs/screenshots/reports.png)
 
 ---
 
